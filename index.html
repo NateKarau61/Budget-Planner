@@ -41,6 +41,13 @@
   header.app-head h1 { font-size: 22px; margin: 0 0 4px; }
   header.app-head p { margin: 0; color: var(--text-secondary); font-size: 14px; max-width: 46em; }
 
+  /* Page tabs (Transactions vs. Quick totals — two completely separate budgets) */
+  .page-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+  .page-tab { flex: 1; text-align: center; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .page-tab.active { background: var(--needs); color: #fff; border-color: var(--needs); }
+  .page-tab:hover:not(.active) { border-color: var(--needs); color: var(--needs); }
+  .page-tabs-caption { font-size: 12px; color: var(--text-secondary); margin: 0 0 18px; text-align: center; }
+
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
   .card h2 { font-size: 15px; margin: 0 0 12px; }
   .card h2 .sub { font-weight: 400; color: var(--text-muted); font-size: 12px; margin-left: 6px; }
@@ -76,11 +83,11 @@
   .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .row input[type="text"] { flex: 1; min-width: 0; }
   .row input[type="number"] { width: 120px; }
-  input[type="text"], input[type="number"] {
+  input[type="text"], input[type="number"], input[type="date"], select {
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
     padding: 7px 9px; font-size: 13px; color: var(--text-primary); font-family: inherit;
   }
-  input[type="text"]:focus, input[type="number"]:focus { outline: 2px solid var(--needs); outline-offset: 1px; }
+  input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus { outline: 2px solid var(--needs); outline-offset: 1px; }
   .row .remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 4px 6px; line-height: 1; }
   .row .remove:hover { color: var(--critical); }
   .add-line { background: none; border: none; color: var(--needs); font-size: 13px; cursor: pointer; padding: 4px 0; }
@@ -91,14 +98,18 @@
 
   /* category cards */
   .categories { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .cat-card { border-radius: 12px; padding: 16px; border: 1px solid var(--border); background: var(--surface-1); }
   .cat-card .row input[type="number"] { width: 84px; }
   .cat-card .row input[type="text"] { text-overflow: ellipsis; }
-  .cat-card { border-radius: 12px; padding: 16px; border: 1px solid var(--border); background: var(--surface-1); }
   .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
   .cat-head .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 7px; }
   .cat-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; }
   .cat-pct { font-size: 12px; color: var(--text-muted); }
   .cat-note { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; }
+  .cat-empty-note { font-size: 13px; color: var(--text-muted); margin: 0 0 8px; }
+  .cat-breakdown { margin-bottom: 6px; }
+  .cat-breakdown-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; color: var(--text-secondary); }
+  .cat-breakdown-row span:last-child { color: var(--text-primary); font-weight: 500; }
 
   /* meter */
   .meter-wrap { margin-top: 12px; }
@@ -128,6 +139,16 @@
   .pct-total-value { font-size: 16px; font-weight: 700; padding: 7px 0; }
   .pct-warning { font-size: 12px; color: var(--critical); margin: 10px 0 0; }
 
+  /* transaction log — editable spreadsheet-style table */
+  .table-scroll { overflow-x: auto; }
+  .txn-edit-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; min-width: 480px; }
+  .txn-edit-table th { text-align: left; font-size: 11px; color: var(--text-muted); font-weight: 500; padding: 4px 6px; }
+  .txn-edit-table td { padding: 4px 6px; vertical-align: middle; }
+  .txn-edit-table input[type="text"], .txn-edit-table input[type="date"], .txn-edit-table input[type="number"], .txn-edit-table select { width: 100%; }
+  .txn-edit-table td.amt-col { width: 100px; }
+  .txn-edit-table td.amt-col input { text-align: right; }
+  .txn-edit-table td.remove-col { width: 32px; text-align: center; }
+
   table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
   table.data-table th, table.data-table td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--grid); }
   table.data-table th:first-child, table.data-table td:first-child { text-align: left; }
@@ -149,6 +170,7 @@
     .row input[type="number"] { width: 90px; }
     .compare-row { grid-template-columns: 1fr; gap: 4px; }
     .compare-label { text-align: left; }
+    .page-tab { font-size: 13px; padding: 10px 8px; }
   }
 </style>
 </head>
@@ -159,9 +181,15 @@
     <header class="app-head">
       <div>
         <h1>Budget Planner</h1>
-        <p>Everyone keeps their own budget using the 50/30/20 rule: 50% needs, 30% wants (your fun money), 20% savings &amp; debt. Add yourself below to get started.</p>
+        <p>Everyone keeps their own budget using the 50/30/20 rule (or your own split): 50% needs, 30% wants (your fun money), 20% savings &amp; debt. Pick a page below, then add yourself to get started.</p>
       </div>
     </header>
+
+    <div class="page-tabs" id="pageTabs">
+      <button type="button" class="page-tab active" data-page="txn">Transactions</button>
+      <button type="button" class="page-tab" data-page="quick">Quick totals</button>
+    </div>
+    <p class="page-tabs-caption">Two completely separate ways to track a budget — log every expense on <b>Transactions</b>, or just type one number per category on <b>Quick totals</b>. Switch anytime; they don't share numbers.</p>
 
     <div class="card">
       <h2>Who's budgeting? <span class="sub">separate, private budgets per person</span></h2>
@@ -173,26 +201,12 @@
     <div class="card" id="ioCard">
       <h2>Save &amp; load your data <span class="sub">no account needed — everything stays in this file</span></h2>
       <p style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;">
-        This tool doesn't save anything automatically. Click <b>Save budgets to file</b> before you close it, and use <b>Load budgets from file</b> next time to pick up where you left off. Everyone's data can live in the same file — each person's budget stays separate.
+        This tool doesn't save anything automatically. Click <b>Save budgets to file</b> before you close it, and use <b>Load budgets from file</b> next time to pick up where you left off. One file holds everyone's data on <b>both</b> pages — each person's budget stays separate, and Transactions and Quick totals stay separate from each other too.
       </p>
       <div class="toolbar">
         <button class="btn primary" id="saveBtn" type="button">⬇ Save budgets to file</button>
         <button class="btn" id="loadBtn" type="button">⬆ Load budgets from file</button>
         <input type="file" id="file-input" accept="application/json">
-      </div>
-    </div>
-
-    <div class="card" id="sheetsCard">
-      <h2>Sync to Google Sheets <span class="sub">optional — one-time setup</span></h2>
-      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;">
-        Paste the Web App URL from the Google Apps Script setup (instructions provided separately) below, then click <b>Sync to Google Sheets</b> any time to push everyone's current numbers straight into your spreadsheet — one tab per person, overwritten each time you sync.
-      </p>
-      <div class="row" style="margin-bottom:10px;">
-        <input type="text" id="sheetsUrlInput" placeholder="Paste your Apps Script Web App URL here">
-      </div>
-      <div class="toolbar">
-        <button class="btn primary" id="syncSheetsBtn" type="button">⇄ Sync to Google Sheets</button>
-        <span id="sheetsSyncStatus" style="font-size:12px;color:var(--text-secondary);align-self:center;"></span>
       </div>
     </div>
 
@@ -215,6 +229,8 @@
   function defaultPcts(){
     return { needs: CAT_META.needs.defaultPct, wants: CAT_META.wants.defaultPct, savings: CAT_META.savings.defaultPct };
   }
+  // Category suggestions: used as datalist autocomplete on the Transactions page,
+  // and as pre-seeded line items on the Quick totals page.
   var PRESETS = {
     needs:   ["Rent / mortgage", "Utilities", "Groceries", "Transportation", "Insurance", "Minimum debt payments"],
     wants:   ["Dining out", "Entertainment & fun", "Subscriptions", "Hobbies"],
@@ -226,15 +242,35 @@
 
   function makeItem(label, amount){ return { id: uid(), label: label || "", amount: amount || 0 }; }
 
-  function makePerson(name){
+  function todayStr(){
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+
+  // ---------- Two completely separate pages/budgets ----------
+  // "txn": log individual transactions, category totals computed from them.
+  // "quick": the original style — type one dollar total directly per category.
+  // Each has its own people list; nothing is shared between the two.
+  var txnState = { people: [], currentId: null, tableView: false };
+  var quickState = { people: [], currentId: null, tableView: false };
+  var activePage = "txn";
+  function activeState(){ return activePage === "txn" ? txnState : quickState; }
+
+  function makeTxnPerson(name){
+    return { id: uid(), name: name || "New person", income: [ makeItem("Paycheck", 0) ], transactions: [], pcts: defaultPcts() };
+  }
+  function makeQuickPerson(name){
     var p = { id: uid(), name: name || "New person", income: [ makeItem("Paycheck", 0) ], needs: [], wants: [], savings: [], pcts: defaultPcts() };
     PRESETS.needs.forEach(function(l){ p.needs.push(makeItem(l, 0)); });
     PRESETS.wants.forEach(function(l){ p.wants.push(makeItem(l, 0)); });
     PRESETS.savings.forEach(function(l){ p.savings.push(makeItem(l, 0)); });
     return p;
   }
-
-  var state = { people: [], currentId: null, tableView: false, sheetsUrl: "" };
+  function makePersonForActivePage(name){
+    return activePage === "txn" ? makeTxnPerson(name) : makeQuickPerson(name);
+  }
 
   // ---------- Calculations ----------
   function sum(items){ return items.reduce(function(a,i){ return a + (parseFloat(i.amount) || 0); }, 0); }
@@ -250,12 +286,41 @@
     return person.pcts || defaultPcts();
   }
 
+  function sumTransactions(transactions, bucket){
+    return (transactions || []).filter(function(t){ return t.bucket === bucket; })
+      .reduce(function(a, t){ return a + (parseFloat(t.amount) || 0); }, 0);
+  }
+
+  // Groups a person's transactions for one bucket by category label, summing
+  // amounts — this is what replaced manually-typed category totals on the
+  // Transactions page. Presets sort first (in their usual order), then any
+  // custom categories alphabetically.
+  function groupTransactionsByCategory(transactions, bucket){
+    var groups = {};
+    var order = [];
+    (transactions || []).filter(function(t){ return t.bucket === bucket; }).forEach(function(t){
+      var label = (t.category || "").trim() || "Other";
+      var key = label.toLowerCase();
+      if (!groups[key]) { groups[key] = { label: label, total: 0 }; order.push(key); }
+      groups[key].total += (parseFloat(t.amount) || 0);
+    });
+    var presetKeys = (PRESETS[bucket] || []).map(function(p){ return p.toLowerCase(); });
+    order.sort(function(a, b){
+      var ai = presetKeys.indexOf(a), bi = presetKeys.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return groups[a].label.localeCompare(groups[b].label);
+    });
+    return order.map(function(k){ return groups[k]; });
+  }
+
   function computeTotals(person){
     var income = sum(person.income);
     var pcts = personPcts(person);
     var totals = {};
     ["needs","wants","savings"].forEach(function(k){
-      var actual = sum(person[k]);
+      var actual = activePage === "txn" ? sumTransactions(person.transactions, k) : sum(person[k]);
       var target = income * pcts[k];
       totals[k] = { actual: actual, target: target, variance: actual - target };
     });
@@ -265,17 +330,19 @@
 
   // ---------- Rendering ----------
   function currentPerson(){
-    return state.people.find(function(p){ return p.id === state.currentId; }) || null;
+    var st = activeState();
+    return st.people.find(function(p){ return p.id === st.currentId; }) || null;
   }
 
   function renderPeopleBar(){
+    var st = activeState();
     var bar = document.getElementById("peopleBar");
     bar.innerHTML = "";
-    state.people.forEach(function(p){
+    st.people.forEach(function(p){
       var chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "person-chip" + (p.id === state.currentId ? " active" : "");
-      chip.setAttribute("aria-pressed", p.id === state.currentId ? "true" : "false");
+      chip.className = "person-chip" + (p.id === st.currentId ? " active" : "");
+      chip.setAttribute("aria-pressed", p.id === st.currentId ? "true" : "false");
       var nameSpan = document.createElement("span");
       nameSpan.textContent = p.name || "Unnamed";
       chip.appendChild(nameSpan);
@@ -300,23 +367,25 @@
     addBtn.addEventListener("click", function(){
       var name = prompt("Name for this budget?", "");
       if (name === null) return;
-      var p = makePerson(name.trim() || ("Person " + (state.people.length + 1)));
-      state.people.push(p);
-      state.currentId = p.id;
+      var st2 = activeState();
+      var p = makePersonForActivePage(name.trim() || ("Person " + (st2.people.length + 1)));
+      st2.people.push(p);
+      st2.currentId = p.id;
       renderAll();
     });
     bar.appendChild(addBtn);
   }
 
   function removePerson(id){
-    state.people = state.people.filter(function(p){ return p.id !== id; });
-    if (state.currentId === id) {
-      state.currentId = state.people.length ? state.people[0].id : null;
+    var st = activeState();
+    st.people = st.people.filter(function(p){ return p.id !== id; });
+    if (st.currentId === id) {
+      st.currentId = st.people.length ? st.people[0].id : null;
     }
     renderAll();
   }
 
-  function selectPerson(id){ state.currentId = id; renderAll(); }
+  function selectPerson(id){ activeState().currentId = id; renderAll(); }
 
   function buildLineItemsSection(title, items, onAdd, onChangeLabel, onChangeAmount, onRemove){
     var section = document.createElement("div");
@@ -392,11 +461,12 @@
     var area = document.getElementById("mainArea");
     area.innerHTML = "";
     var person = currentPerson();
+    var st = activeState();
 
     if (!person) {
       var empty = document.createElement("div");
       empty.className = "card empty-state";
-      empty.innerHTML = "<div>No one's added yet. Click <b>+ Add person</b> above to start a budget — or load a previously saved file below.</div>";
+      empty.innerHTML = "<div>No one's added yet on this page. Click <b>+ Add person</b> above to start a budget — or load a previously saved file below.</div>";
       area.appendChild(empty);
       document.getElementById("ioCard").style.display = "";
       return;
@@ -456,6 +526,11 @@
     incomeCard.appendChild(incomeTotalRow);
     area.appendChild(incomeCard);
 
+    // Transaction log — only on the Transactions page
+    if (activePage === "txn") {
+      area.appendChild(buildTransactionsSection(person));
+    }
+
     // Adjustable split
     area.appendChild(buildSplitEditor(person));
 
@@ -471,8 +546,9 @@
     var catSection = document.createElement("div");
     catSection.className = "card";
     var catHead = document.createElement("h2");
-    catHead.innerHTML = "Spending &amp; savings categories <span class=\"sub\">" +
-      Math.round(pcts.needs*100) + "/" + Math.round(pcts.wants*100) + "/" + Math.round(pcts.savings*100) + " split</span>";
+    var catSub = Math.round(pcts.needs*100) + "/" + Math.round(pcts.wants*100) + "/" + Math.round(pcts.savings*100) + " split" +
+      (activePage === "txn" ? " — totals come from your transaction log above" : "");
+    catHead.innerHTML = "Spending &amp; savings categories <span class=\"sub\">" + catSub + "</span>";
     catSection.appendChild(catHead);
     catSection.appendChild(catWrap);
     area.appendChild(catSection);
@@ -495,10 +571,10 @@
     var toggleBtn = document.createElement("button");
     toggleBtn.type = "button";
     toggleBtn.className = "table-toggle";
-    toggleBtn.textContent = state.tableView ? "Hide table view" : "Show table view (accessible summary)";
-    toggleBtn.addEventListener("click", function(){ state.tableView = !state.tableView; renderMain(); });
+    toggleBtn.textContent = st.tableView ? "Hide table view" : "Show table view (accessible summary)";
+    toggleBtn.addEventListener("click", function(){ st.tableView = !st.tableView; renderMain(); });
     tableCard.appendChild(toggleBtn);
-    if (state.tableView) {
+    if (st.tableView) {
       tableCard.appendChild(buildTable(totals, person));
     }
     area.appendChild(tableCard);
@@ -538,6 +614,135 @@
       t.appendChild(d);
     }
     return t;
+  }
+
+  // ---------- Transactions page: editable spreadsheet-style table ----------
+  // Every row is a transaction you type straight into (date, category, bucket,
+  // amount) — this feeds computeTotals()/groupTransactionsByCategory() above,
+  // so the category cards and charts update automatically as you type.
+  function buildTransactionsSection(person){
+    var card = document.createElement("div");
+    card.className = "card";
+    var head = document.createElement("h2");
+    head.innerHTML = "Transactions <span class=\"sub\">fill in a row per expense — category totals below update automatically</span>";
+    card.appendChild(head);
+
+    if (!person.transactions.length) {
+      var emptyMsg = document.createElement("p");
+      emptyMsg.className = "cat-empty-note";
+      emptyMsg.textContent = "No rows yet — click \"+ Add row\" below to log your first expense.";
+      card.appendChild(emptyMsg);
+    } else {
+      var scrollWrap = document.createElement("div");
+      scrollWrap.className = "table-scroll";
+      var table = document.createElement("table");
+      table.className = "txn-edit-table";
+      var thead = document.createElement("thead");
+      thead.innerHTML = "<tr><th>Date</th><th>Category</th><th>Bucket</th><th>Amount</th><th></th></tr>";
+      table.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      person.transactions.forEach(function(t){
+        tbody.appendChild(buildTxnRow(person, t));
+      });
+      table.appendChild(tbody);
+      scrollWrap.appendChild(table);
+      card.appendChild(scrollWrap);
+    }
+
+    var addBtn = document.createElement("button");
+    addBtn.className = "add-line";
+    addBtn.type = "button";
+    addBtn.textContent = "+ Add row";
+    addBtn.addEventListener("click", function(){
+      var t = { id: uid(), date: todayStr(), bucket: "needs", category: "", amount: 0 };
+      person.transactions.push(t);
+      renderMain();
+      requestAnimationFrame(function(){
+        var el = document.querySelector('[data-item-id="' + t.id + '"][data-field="category"]');
+        if (el) el.focus();
+      });
+    });
+    card.appendChild(addBtn);
+
+    return card;
+  }
+
+  function buildTxnRow(person, t){
+    var tr = document.createElement("tr");
+
+    var dateTd = document.createElement("td");
+    var dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.value = t.date || "";
+    dateInput.dataset.itemId = t.id;
+    dateInput.dataset.field = "date";
+    dateInput.addEventListener("input", function(){ t.date = dateInput.value; });
+    dateTd.appendChild(dateInput);
+
+    var catTd = document.createElement("td");
+    var catInput = document.createElement("input");
+    catInput.type = "text";
+    catInput.value = t.category || "";
+    catInput.placeholder = "Category";
+    catInput.dataset.itemId = t.id;
+    catInput.dataset.field = "category";
+    var datalistId = "txnCatSuggest-" + t.id;
+    catInput.setAttribute("list", datalistId);
+    catInput.addEventListener("input", function(){ t.category = catInput.value; renderMain(); });
+    var datalist = document.createElement("datalist");
+    datalist.id = datalistId;
+    (PRESETS[t.bucket] || []).forEach(function(p){
+      var o = document.createElement("option");
+      o.value = p;
+      datalist.appendChild(o);
+    });
+    catTd.appendChild(catInput);
+    catTd.appendChild(datalist);
+
+    var bucketTd = document.createElement("td");
+    var bucketSelect = document.createElement("select");
+    ["needs","wants","savings"].forEach(function(k){
+      var opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = CAT_META[k].label;
+      if (k === t.bucket) opt.selected = true;
+      bucketSelect.appendChild(opt);
+    });
+    bucketSelect.addEventListener("change", function(){ t.bucket = bucketSelect.value; renderMain(); });
+    bucketTd.appendChild(bucketSelect);
+
+    var amtTd = document.createElement("td");
+    amtTd.className = "amt-col";
+    var amountInput = document.createElement("input");
+    amountInput.type = "number";
+    amountInput.min = "0";
+    amountInput.step = "1";
+    amountInput.value = t.amount || "";
+    amountInput.placeholder = "0";
+    amountInput.dataset.itemId = t.id;
+    amountInput.dataset.field = "amount";
+    amountInput.addEventListener("input", function(){ t.amount = amountInput.value; renderMain(); });
+    amtTd.appendChild(amountInput);
+
+    var removeTd = document.createElement("td");
+    removeTd.className = "remove-col";
+    var removeBtn = document.createElement("button");
+    removeBtn.className = "remove";
+    removeBtn.type = "button";
+    removeBtn.innerHTML = "&times;";
+    removeBtn.title = "Remove row";
+    removeBtn.addEventListener("click", function(){
+      person.transactions = person.transactions.filter(function(x){ return x.id !== t.id; });
+      renderMain();
+    });
+    removeTd.appendChild(removeBtn);
+
+    tr.appendChild(dateTd);
+    tr.appendChild(catTd);
+    tr.appendChild(bucketTd);
+    tr.appendChild(amtTd);
+    tr.appendChild(removeTd);
+    return tr;
   }
 
   function buildSplitEditor(person){
@@ -730,12 +935,37 @@
     note.textContent = meta.note;
     card.appendChild(note);
 
-    card.appendChild(buildLineItemsSection(meta.label, person[key],
-      function(){ person[key].push(makeItem("", 0)); renderMain(); },
-      function(id, val){ var it = person[key].find(function(i){return i.id===id;}); if(it) it.label = val; },
-      function(id, val){ var it = person[key].find(function(i){return i.id===id;}); if(it){ it.amount = val; renderMain(); } },
-      function(id){ person[key] = person[key].filter(function(i){return i.id!==id;}); renderMain(); }
-    ));
+    if (activePage === "txn") {
+      var groups = groupTransactionsByCategory(person.transactions, key);
+      if (!groups.length) {
+        var emptyP = document.createElement("p");
+        emptyP.className = "cat-empty-note";
+        emptyP.textContent = "No transactions logged yet.";
+        card.appendChild(emptyP);
+      } else {
+        var breakdown = document.createElement("div");
+        breakdown.className = "cat-breakdown";
+        groups.forEach(function(g){
+          var row = document.createElement("div");
+          row.className = "cat-breakdown-row";
+          var lbl = document.createElement("span");
+          lbl.textContent = g.label;
+          var val = document.createElement("span");
+          val.textContent = fmt(g.total);
+          row.appendChild(lbl);
+          row.appendChild(val);
+          breakdown.appendChild(row);
+        });
+        card.appendChild(breakdown);
+      }
+    } else {
+      card.appendChild(buildLineItemsSection(meta.label, person[key],
+        function(){ person[key].push(makeItem("", 0)); renderMain(); },
+        function(id, val){ var it = person[key].find(function(i){return i.id===id;}); if(it) it.label = val; },
+        function(id, val){ var it = person[key].find(function(i){return i.id===id;}); if(it){ it.amount = val; renderMain(); } },
+        function(id){ person[key] = person[key].filter(function(i){return i.id!==id;}); renderMain(); }
+      ));
+    }
 
     var totalRow = document.createElement("div");
     totalRow.className = "bucket-total";
@@ -810,9 +1040,9 @@
 
   function renderAll(){ renderPeopleBar(); renderMain(); }
 
-  // ---------- Save / Load ----------
+  // ---------- Save / Load (one file, both pages, kept fully separate) ----------
   function exportData(){
-    var payload = { version: 1, exportedAt: "manual-save", sheetsUrl: state.sheetsUrl, people: state.people };
+    var payload = { version: 3, exportedAt: "manual-save", transactionsPeople: txnState.people, quickTotalsPeople: quickState.people };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -829,58 +1059,64 @@
     reader.onload = function(e){
       try {
         var data = JSON.parse(e.target.result);
-        if (!data || !Array.isArray(data.people)) throw new Error("bad format");
-        data.people.forEach(function(p){ if (!p.pcts) p.pcts = defaultPcts(); });
-        state.people = data.people;
-        state.currentId = state.people.length ? state.people[0].id : null;
-        if (typeof data.sheetsUrl === "string") {
-          state.sheetsUrl = data.sheetsUrl;
-          document.getElementById("sheetsUrlInput").value = data.sheetsUrl;
+        var txnPeople, quickPeople;
+
+        if (data && Array.isArray(data.transactionsPeople) && Array.isArray(data.quickTotalsPeople)) {
+          txnPeople = data.transactionsPeople;
+          quickPeople = data.quickTotalsPeople;
+        } else if (data && Array.isArray(data.people)) {
+          // File saved by an earlier version of this tool, before the two
+          // separate pages existed — sort each person onto the right page.
+          txnPeople = [];
+          quickPeople = [];
+          data.people.forEach(function(p){
+            if (Array.isArray(p.transactions)) { txnPeople.push(p); }
+            else { quickPeople.push(p); }
+          });
+        } else {
+          throw new Error("bad format");
         }
+
+        txnPeople.forEach(function(p){
+          if (!p.pcts) p.pcts = defaultPcts();
+          if (!Array.isArray(p.transactions)) p.transactions = [];
+          // Migrate any legacy needs/wants/savings line items into transactions.
+          ["needs","wants","savings"].forEach(function(k){
+            if (Array.isArray(p[k])) {
+              p[k].forEach(function(item){
+                var amt = parseFloat(item.amount) || 0;
+                var label = (item.label || "").trim();
+                if (amt !== 0 || label) {
+                  p.transactions.push({ id: uid(), date: "", bucket: k, category: label || "Other", amount: amt });
+                }
+              });
+              delete p[k];
+            }
+          });
+          if (!Array.isArray(p.income) || !p.income.length) p.income = [ makeItem("Paycheck", 0) ];
+        });
+
+        quickPeople.forEach(function(p){
+          if (!p.pcts) p.pcts = defaultPcts();
+          ["needs","wants","savings"].forEach(function(k){
+            if (!Array.isArray(p[k])) p[k] = [];
+          });
+          delete p.transactions; // keep the two pages fully independent
+          if (!Array.isArray(p.income) || !p.income.length) p.income = [ makeItem("Paycheck", 0) ];
+        });
+
+        txnState.people = txnPeople;
+        txnState.currentId = txnPeople.length ? txnPeople[0].id : null;
+        quickState.people = quickPeople;
+        quickState.currentId = quickPeople.length ? quickPeople[0].id : null;
+
         renderAll();
-        alert("Loaded " + state.people.length + " budget(s).");
+        alert("Loaded " + txnPeople.length + " Transactions budget(s) and " + quickPeople.length + " Quick totals budget(s).");
       } catch (err) {
         alert("Couldn't read that file — make sure it's a budget file saved from this tool.");
       }
     };
     reader.readAsText(file);
-  }
-
-  // ---------- Google Sheets sync ----------
-  // Sends everyone's current numbers to a Google Apps Script Web App URL the
-  // user deploys themselves (see the setup instructions). Apps Script doesn't
-  // return CORS headers for cross-origin requests, so this uses mode:"no-cors" —
-  // the write still goes through server-side, we just can't read a response back,
-  // so success is optimistic (check the sheet itself to confirm).
-  function syncToSheets(){
-    var statusEl = document.getElementById("sheetsSyncStatus");
-    var url = (document.getElementById("sheetsUrlInput").value || "").trim();
-    state.sheetsUrl = url;
-    if (!url) {
-      statusEl.textContent = "Paste your Apps Script Web App URL first.";
-      statusEl.style.color = "var(--critical)";
-      return;
-    }
-    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) {
-      statusEl.textContent = "That doesn't look like a script.google.com Web App URL — double-check it.";
-      statusEl.style.color = "var(--critical)";
-      return;
-    }
-    statusEl.textContent = "Syncing…";
-    statusEl.style.color = "var(--text-secondary)";
-    var payload = { syncedAt: new Date().toISOString(), people: state.people };
-    fetch(url, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids a CORS preflight Apps Script can't answer
-      body: JSON.stringify(payload)
-    }).then(function(){
-      statusEl.textContent = "Sent — check your Google Sheet to confirm (one tab per person).";
-      statusEl.style.color = "var(--success)";
-    }).catch(function(){
-      statusEl.textContent = "Couldn't reach that URL — check it's deployed with access set to \"Anyone.\"";
-      statusEl.style.color = "var(--critical)";
-    });
   }
 
   // ---------- Wire up ----------
@@ -892,15 +1128,23 @@
     if (e.target.files && e.target.files[0]) importData(e.target.files[0]);
     e.target.value = "";
   });
-  document.getElementById("syncSheetsBtn").addEventListener("click", syncToSheets);
-  document.getElementById("sheetsUrlInput").addEventListener("input", function(e){
-    state.sheetsUrl = e.target.value;
+  document.querySelectorAll(".page-tab").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      activePage = btn.dataset.page;
+      document.querySelectorAll(".page-tab").forEach(function(b){ b.classList.toggle("active", b === btn); });
+      renderAll();
+    });
   });
 
   // ---------- Init ----------
-  var seed = makePerson("You");
-  state.people.push(seed);
-  state.currentId = seed.id;
+  var txnSeed = makeTxnPerson("You");
+  txnState.people.push(txnSeed);
+  txnState.currentId = txnSeed.id;
+
+  var quickSeed = makeQuickPerson("You");
+  quickState.people.push(quickSeed);
+  quickState.currentId = quickSeed.id;
+
   renderAll();
 })();
 </script>
