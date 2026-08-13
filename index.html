@@ -121,6 +121,13 @@
   .legend .item { display: flex; align-items: center; gap: 6px; }
   .legend .sw { width: 10px; height: 10px; border-radius: 3px; }
 
+  .pct-editor { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+  .pct-field { display: flex; flex-direction: column; gap: 6px; }
+  .pct-field label { font-size: 12px; color: var(--text-secondary); }
+  .pct-field input[type="number"] { width: 80px; }
+  .pct-total-value { font-size: 16px; font-weight: 700; padding: 7px 0; }
+  .pct-warning { font-size: 12px; color: var(--critical); margin: 10px 0 0; }
+
   table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
   table.data-table th, table.data-table td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--grid); }
   table.data-table th:first-child, table.data-table td:first-child { text-align: left; }
@@ -175,6 +182,20 @@
       </div>
     </div>
 
+    <div class="card" id="sheetsCard">
+      <h2>Sync to Google Sheets <span class="sub">optional — one-time setup</span></h2>
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 12px;">
+        Paste the Web App URL from the Google Apps Script setup (instructions provided separately) below, then click <b>Sync to Google Sheets</b> any time to push everyone's current numbers straight into your spreadsheet — one tab per person, overwritten each time you sync.
+      </p>
+      <div class="row" style="margin-bottom:10px;">
+        <input type="text" id="sheetsUrlInput" placeholder="Paste your Apps Script Web App URL here">
+      </div>
+      <div class="toolbar">
+        <button class="btn primary" id="syncSheetsBtn" type="button">⇄ Sync to Google Sheets</button>
+        <span id="sheetsSyncStatus" style="font-size:12px;color:var(--text-secondary);align-self:center;"></span>
+      </div>
+    </div>
+
     <footer class="note">
       Data lives only in this open tab and in files you save — nothing is uploaded anywhere. The 50/30/20 split is a common guideline, not a rule; adjust category targets to fit your own situation.
     </footer>
@@ -187,10 +208,13 @@
 
   // ---------- Palette ----------
   var CAT_META = {
-    needs:   { label: "Needs",         pct: 0.50, colorVar: "--needs",   tintVar: "--needs-tint",   note: "Rent/mortgage, utilities, groceries, insurance, transportation, minimum debt payments." },
-    wants:   { label: "Wants (fun!)",  pct: 0.30, colorVar: "--wants",   tintVar: "--wants-tint",   note: "Dining out, entertainment, hobbies, subscriptions, travel — the fun stuff, guilt-free." },
-    savings: { label: "Savings & debt",pct: 0.20, colorVar: "--savings", tintVar: "--savings-tint", note: "Emergency fund, retirement, extra debt payoff, investing, other savings goals." }
+    needs:   { label: "Needs",         defaultPct: 0.50, colorVar: "--needs",   tintVar: "--needs-tint",   note: "Rent/mortgage, utilities, groceries, insurance, transportation, minimum debt payments." },
+    wants:   { label: "Wants (fun!)",  defaultPct: 0.30, colorVar: "--wants",   tintVar: "--wants-tint",   note: "Dining out, entertainment, hobbies, subscriptions, travel — the fun stuff, guilt-free." },
+    savings: { label: "Savings & debt",defaultPct: 0.20, colorVar: "--savings", tintVar: "--savings-tint", note: "Emergency fund, retirement, extra debt payoff, investing, other savings goals." }
   };
+  function defaultPcts(){
+    return { needs: CAT_META.needs.defaultPct, wants: CAT_META.wants.defaultPct, savings: CAT_META.savings.defaultPct };
+  }
   var PRESETS = {
     needs:   ["Rent / mortgage", "Utilities", "Groceries", "Transportation", "Insurance", "Minimum debt payments"],
     wants:   ["Dining out", "Entertainment & fun", "Subscriptions", "Hobbies"],
@@ -203,14 +227,14 @@
   function makeItem(label, amount){ return { id: uid(), label: label || "", amount: amount || 0 }; }
 
   function makePerson(name){
-    var p = { id: uid(), name: name || "New person", income: [ makeItem("Paycheck", 0) ], needs: [], wants: [], savings: [] };
+    var p = { id: uid(), name: name || "New person", income: [ makeItem("Paycheck", 0) ], needs: [], wants: [], savings: [], pcts: defaultPcts() };
     PRESETS.needs.forEach(function(l){ p.needs.push(makeItem(l, 0)); });
     PRESETS.wants.forEach(function(l){ p.wants.push(makeItem(l, 0)); });
     PRESETS.savings.forEach(function(l){ p.savings.push(makeItem(l, 0)); });
     return p;
   }
 
-  var state = { people: [], currentId: null, tableView: false };
+  var state = { people: [], currentId: null, tableView: false, sheetsUrl: "" };
 
   // ---------- Calculations ----------
   function sum(items){ return items.reduce(function(a,i){ return a + (parseFloat(i.amount) || 0); }, 0); }
@@ -222,12 +246,17 @@
   }
   function pct(n){ return Math.round(n * 100) + "%"; }
 
+  function personPcts(person){
+    return person.pcts || defaultPcts();
+  }
+
   function computeTotals(person){
     var income = sum(person.income);
+    var pcts = personPcts(person);
     var totals = {};
     ["needs","wants","savings"].forEach(function(k){
       var actual = sum(person[k]);
-      var target = income * CAT_META[k].pct;
+      var target = income * pcts[k];
       totals[k] = { actual: actual, target: target, variance: actual - target };
     });
     var allocated = totals.needs.actual + totals.wants.actual + totals.savings.actual;
@@ -374,6 +403,7 @@
     }
 
     var totals = computeTotals(person);
+    var pcts = personPcts(person);
 
     // Person name editor
     var nameCard = document.createElement("div");
@@ -426,8 +456,11 @@
     incomeCard.appendChild(incomeTotalRow);
     area.appendChild(incomeCard);
 
-    // 50/30/20 comparison chart
-    area.appendChild(buildCompareChart(totals));
+    // Adjustable split
+    area.appendChild(buildSplitEditor(person));
+
+    // Comparison chart
+    area.appendChild(buildCompareChart(totals, person));
 
     // Category cards
     var catWrap = document.createElement("div");
@@ -438,7 +471,8 @@
     var catSection = document.createElement("div");
     catSection.className = "card";
     var catHead = document.createElement("h2");
-    catHead.innerHTML = "Spending &amp; savings categories <span class=\"sub\">the 50/30/20 rule</span>";
+    catHead.innerHTML = "Spending &amp; savings categories <span class=\"sub\">" +
+      Math.round(pcts.needs*100) + "/" + Math.round(pcts.wants*100) + "/" + Math.round(pcts.savings*100) + " split</span>";
     catSection.appendChild(catHead);
     catSection.appendChild(catWrap);
     area.appendChild(catSection);
@@ -465,7 +499,7 @@
     toggleBtn.addEventListener("click", function(){ state.tableView = !state.tableView; renderMain(); });
     tableCard.appendChild(toggleBtn);
     if (state.tableView) {
-      tableCard.appendChild(buildTable(totals));
+      tableCard.appendChild(buildTable(totals, person));
     }
     area.appendChild(tableCard);
 
@@ -506,11 +540,84 @@
     return t;
   }
 
-  function buildCompareChart(totals){
+  function buildSplitEditor(person){
     var card = document.createElement("div");
     card.className = "card";
     var head = document.createElement("h2");
-    head.innerHTML = "Recommended vs. your actual split <span class=\"sub\">50 / 30 / 20</span>";
+    head.innerHTML = "Your split <span class=\"sub\">adjust if 50/30/20 doesn't fit — applies to " + (person.name || "this budget") + " only</span>";
+    card.appendChild(head);
+
+    var pcts = personPcts(person);
+    var wrap = document.createElement("div");
+    wrap.className = "pct-editor";
+
+    var fields = [
+      { key: "needs",   label: "Needs %" },
+      { key: "wants",   label: "Wants (fun) %" },
+      { key: "savings", label: "Savings & debt %" }
+    ];
+    fields.forEach(function(f){
+      var field = document.createElement("div");
+      field.className = "pct-field";
+      var lbl = document.createElement("label");
+      lbl.textContent = f.label;
+      var input = document.createElement("input");
+      input.type = "number";
+      input.min = "0"; input.max = "100"; input.step = "1";
+      input.value = Math.round(pcts[f.key] * 100);
+      input.dataset.itemId = "pct-" + f.key;
+      input.dataset.field = "pct";
+      input.addEventListener("input", function(){
+        var v = parseFloat(input.value);
+        if (isNaN(v)) v = 0;
+        v = Math.max(0, Math.min(100, v));
+        person.pcts[f.key] = v / 100;
+        renderMain();
+      });
+      field.appendChild(lbl);
+      field.appendChild(input);
+      wrap.appendChild(field);
+    });
+
+    var totalPct = Math.round((pcts.needs + pcts.wants + pcts.savings) * 100);
+    var totalField = document.createElement("div");
+    totalField.className = "pct-field";
+    var totalLbl = document.createElement("label");
+    totalLbl.textContent = "Total";
+    var totalVal = document.createElement("div");
+    totalVal.className = "pct-total-value";
+    totalVal.textContent = totalPct + "%";
+    totalVal.style.color = totalPct === 100 ? "var(--success)" : "var(--critical)";
+    totalField.appendChild(totalLbl);
+    totalField.appendChild(totalVal);
+    wrap.appendChild(totalField);
+
+    var resetBtn = document.createElement("button");
+    resetBtn.className = "btn small";
+    resetBtn.type = "button";
+    resetBtn.textContent = "Reset to 50/30/20";
+    resetBtn.addEventListener("click", function(){ person.pcts = defaultPcts(); renderMain(); });
+    wrap.appendChild(resetBtn);
+
+    card.appendChild(wrap);
+
+    if (totalPct !== 100) {
+      var warn = document.createElement("p");
+      warn.className = "pct-warning";
+      warn.textContent = "These don't have to add up to 100%, but the \"recommended\" targets only make full sense if they do — right now they add up to " + totalPct + "%.";
+      card.appendChild(warn);
+    }
+
+    return card;
+  }
+
+  function buildCompareChart(totals, person){
+    var pcts = personPcts(person);
+    var card = document.createElement("div");
+    card.className = "card";
+    var head = document.createElement("h2");
+    head.innerHTML = "Recommended vs. your actual split <span class=\"sub\">" +
+      Math.round(pcts.needs*100) + " / " + Math.round(pcts.wants*100) + " / " + Math.round(pcts.savings*100) + "</span>";
     card.appendChild(head);
 
     var legend = document.createElement("div");
@@ -523,7 +630,7 @@
       sw.style.background = "var(" + CAT_META[k].colorVar + ")";
       item.appendChild(sw);
       var lbl = document.createElement("span");
-      lbl.textContent = CAT_META[k].label + " (target " + pct(CAT_META[k].pct) + ")";
+      lbl.textContent = CAT_META[k].label + " (target " + pct(pcts[k]) + ")";
       item.appendChild(lbl);
       legend.appendChild(item);
     });
@@ -565,9 +672,9 @@
     }
 
     var targetRow = buildRow("Recommended", [
-      { label: "Needs", value: income*0.5, colorVar: CAT_META.needs.colorVar },
-      { label: "Wants", value: income*0.3, colorVar: CAT_META.wants.colorVar },
-      { label: "Savings", value: income*0.2, colorVar: CAT_META.savings.colorVar }
+      { label: "Needs", value: income*pcts.needs, colorVar: CAT_META.needs.colorVar },
+      { label: "Wants", value: income*pcts.wants, colorVar: CAT_META.wants.colorVar },
+      { label: "Savings", value: income*pcts.savings, colorVar: CAT_META.savings.colorVar }
     ], income);
     card.appendChild(targetRow.row);
 
@@ -613,7 +720,7 @@
     name.appendChild(document.createTextNode(meta.label));
     var pctSpan = document.createElement("span");
     pctSpan.className = "cat-pct";
-    pctSpan.textContent = "target " + pct(meta.pct);
+    pctSpan.textContent = "target " + pct(personPcts(person)[key]);
     head.appendChild(name);
     head.appendChild(pctSpan);
     card.appendChild(head);
@@ -677,22 +784,25 @@
     return card;
   }
 
-  function buildTable(totals){
+  function buildTable(totals, person){
+    var pcts = personPcts(person);
     var table = document.createElement("table");
     table.className = "data-table";
     var thead = document.createElement("thead");
     thead.innerHTML = "<tr><th>Category</th><th>Target %</th><th>Target $</th><th>Actual $</th><th>Variance</th></tr>";
     table.appendChild(thead);
     var tbody = document.createElement("tbody");
+    var pctTotal = 0;
     ["needs","wants","savings"].forEach(function(k){
       var meta = CAT_META[k], t = totals.cats[k];
+      pctTotal += pcts[k];
       var tr = document.createElement("tr");
       var varianceText = (t.variance > 0 ? "+" : "") + fmt(t.variance);
-      tr.innerHTML = "<td>" + meta.label + "</td><td>" + pct(meta.pct) + "</td><td>" + fmt(t.target) + "</td><td>" + fmt(t.actual) + "</td><td>" + varianceText + "</td>";
+      tr.innerHTML = "<td>" + meta.label + "</td><td>" + pct(pcts[k]) + "</td><td>" + fmt(t.target) + "</td><td>" + fmt(t.actual) + "</td><td>" + varianceText + "</td>";
       tbody.appendChild(tr);
     });
     var trTotal = document.createElement("tr");
-    trTotal.innerHTML = "<td><b>Total</b></td><td>100%</td><td>" + fmt(totals.income) + "</td><td>" + fmt(totals.allocated) + "</td><td>" + fmt(totals.income-totals.allocated) + " left</td>";
+    trTotal.innerHTML = "<td><b>Total</b></td><td>" + pct(pctTotal) + "</td><td>" + fmt(totals.income) + "</td><td>" + fmt(totals.allocated) + "</td><td>" + fmt(totals.income-totals.allocated) + " left</td>";
     tbody.appendChild(trTotal);
     table.appendChild(tbody);
     return table;
@@ -702,7 +812,7 @@
 
   // ---------- Save / Load ----------
   function exportData(){
-    var payload = { version: 1, exportedAt: "manual-save", people: state.people };
+    var payload = { version: 1, exportedAt: "manual-save", sheetsUrl: state.sheetsUrl, people: state.people };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -720,8 +830,13 @@
       try {
         var data = JSON.parse(e.target.result);
         if (!data || !Array.isArray(data.people)) throw new Error("bad format");
+        data.people.forEach(function(p){ if (!p.pcts) p.pcts = defaultPcts(); });
         state.people = data.people;
         state.currentId = state.people.length ? state.people[0].id : null;
+        if (typeof data.sheetsUrl === "string") {
+          state.sheetsUrl = data.sheetsUrl;
+          document.getElementById("sheetsUrlInput").value = data.sheetsUrl;
+        }
         renderAll();
         alert("Loaded " + state.people.length + " budget(s).");
       } catch (err) {
@@ -729,6 +844,43 @@
       }
     };
     reader.readAsText(file);
+  }
+
+  // ---------- Google Sheets sync ----------
+  // Sends everyone's current numbers to a Google Apps Script Web App URL the
+  // user deploys themselves (see the setup instructions). Apps Script doesn't
+  // return CORS headers for cross-origin requests, so this uses mode:"no-cors" —
+  // the write still goes through server-side, we just can't read a response back,
+  // so success is optimistic (check the sheet itself to confirm).
+  function syncToSheets(){
+    var statusEl = document.getElementById("sheetsSyncStatus");
+    var url = (document.getElementById("sheetsUrlInput").value || "").trim();
+    state.sheetsUrl = url;
+    if (!url) {
+      statusEl.textContent = "Paste your Apps Script Web App URL first.";
+      statusEl.style.color = "var(--critical)";
+      return;
+    }
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) {
+      statusEl.textContent = "That doesn't look like a script.google.com Web App URL — double-check it.";
+      statusEl.style.color = "var(--critical)";
+      return;
+    }
+    statusEl.textContent = "Syncing…";
+    statusEl.style.color = "var(--text-secondary)";
+    var payload = { syncedAt: new Date().toISOString(), people: state.people };
+    fetch(url, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // avoids a CORS preflight Apps Script can't answer
+      body: JSON.stringify(payload)
+    }).then(function(){
+      statusEl.textContent = "Sent — check your Google Sheet to confirm (one tab per person).";
+      statusEl.style.color = "var(--success)";
+    }).catch(function(){
+      statusEl.textContent = "Couldn't reach that URL — check it's deployed with access set to \"Anyone.\"";
+      statusEl.style.color = "var(--critical)";
+    });
   }
 
   // ---------- Wire up ----------
@@ -739,6 +891,10 @@
   document.getElementById("file-input").addEventListener("change", function(e){
     if (e.target.files && e.target.files[0]) importData(e.target.files[0]);
     e.target.value = "";
+  });
+  document.getElementById("syncSheetsBtn").addEventListener("click", syncToSheets);
+  document.getElementById("sheetsUrlInput").addEventListener("input", function(e){
+    state.sheetsUrl = e.target.value;
   });
 
   // ---------- Init ----------
